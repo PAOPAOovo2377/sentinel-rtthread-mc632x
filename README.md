@@ -6,6 +6,8 @@
 ![Platform](https://img.shields.io/badge/SoC-MC632X%20FH8662V100-orange)
 ![Language](https://img.shields.io/badge/C-99-informational)
 ![License](https://img.shields.io/badge/License-MIT-green)
+![Release](https://img.shields.io/github/v/release/PAOPAOovo2377/sentinel-rtthread-mc632x?label=release&color=red)
+![Stars](https://img.shields.io/github/stars/PAOPAOovo2377/sentinel-rtthread-mc632x?label=stars)
 
 ---
 
@@ -160,6 +162,9 @@ rt-thread/
 ### 2. 覆盖应用代码
 
 ```bash
+# 先克隆本仓库（下载到名为 SENTINEL 的目录）
+git clone https://github.com/PAOPAOovo2377/sentinel-rtthread-mc632x.git SENTINEL
+
 # 在 SDK 根目录执行，把本仓库的 app/ 覆盖到 app/media_demo/
 cp -r SENTINEL/app/. rt-thread/app/media_demo/
 ```
