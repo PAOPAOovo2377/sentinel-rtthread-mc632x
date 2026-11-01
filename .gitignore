@@ -1,0 +1,33 @@
+# ---------- 编译产物 ----------
+out/
+build/
+*.o
+*.a
+*.bin
+*.hex
+*.elf
+*.map
+*.su
+*.d
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+*.pyo
+
+# ---------- 隐私数据：人脸照片一律不入库 ----------
+app/cloud_face/tools/known/
+app/cloud_face/tools/received/
+*.jpg.face
+
+# ---------- 本地密钥覆盖 ----------
+xf_credentials.local.h
+*.local.h
+.env
+.env.*
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

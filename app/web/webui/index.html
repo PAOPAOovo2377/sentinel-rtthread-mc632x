@@ -1,0 +1,1807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SENTINEL · MC632X 双屏 AI 侦测</title>
+<style>
+  :root{
+    --bg:#f7f2e6; --bg2:#f1e9d8; --card:#fffdf7; --line:#e7dcc4;
+    --ink:#3d3427; --ink2:#6d6151; --mut:#9c8e78;
+    --amber:#d99b2b; --amber-soft:#f6e6c4;
+    --teal:#1f9d8f; --teal-soft:#d8f0ec;
+    --ok:#2f9e6e; --bad:#c1483a; --warn:#d08a1e;
+    --sh:0 1px 2px rgba(120,100,60,.06), 0 6px 18px rgba(120,100,60,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(900px 420px at 12% -8%, #fffdf6 0%, rgba(255,253,246,0) 60%),
+      radial-gradient(700px 380px at 88% 0%, #f3ecd9 0%, rgba(243,236,217,0) 62%),
+      var(--bg);
+    color:var(--ink);
+    font:14px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1560px;margin:0 auto;padding:18px 22px 40px}
+
+  /* ---------- 顶栏 ---------- */
+  header{display:flex;align-items:center;gap:14px;padding:6px 2px 16px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .logo{
+    width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(145deg,#f3cf8b,#d99b2b);color:#fff;font-weight:800;
+    box-shadow:0 4px 12px rgba(217,155,43,.35);font-size:17px;letter-spacing:.5px;
+  }
+  .bname{font-size:16px;font-weight:800;letter-spacing:3px}
+  .bsub{font-size:11.5px;color:var(--mut);letter-spacing:1.2px;margin-top:1px}
+  header .spacer{flex:1}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;
+    border-radius:999px;background:#fff;border:1px solid var(--line);
+    font-size:12.5px;color:var(--ink2);box-shadow:var(--sh);white-space:nowrap;
+  }
+  .chip b{color:var(--ink);font-weight:600}
+  .dot{width:8px;height:8px;border-radius:50%;background:#c9bda6;transition:.3s}
+  .dot.on{background:var(--ok);box-shadow:0 0 0 4px rgba(47,158,110,.14)}
+  .clock{font-variant-numeric:tabular-nums;letter-spacing:1px}
+
+  /* ---------- 栅格 ---------- */
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+  .col{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--sh);overflow:hidden;
+  }
+  .card-h{
+    display:flex;align-items:center;gap:8px;padding:11px 14px 9px;
+    font-size:12.5px;font-weight:700;color:var(--ink2);letter-spacing:.6px;
+    border-bottom:1px solid #f0e8d6;
+  }
+  .card-h .spacer{flex:1}
+  .card-h .hint{font-weight:400;letter-spacing:0;color:var(--mut);font-size:11.5px}
+  .pad{padding:12px 14px}
+
+  .tag{
+    font-size:11px;padding:2px 8px;border-radius:999px;background:#f3ecda;
+    color:var(--ink2);border:1px solid #e8ddc5;white-space:nowrap;
+  }
+  .tag.on{background:var(--teal-soft);color:#12786d;border-color:#b7e0d9}
+  .tag.er{background:#fbe4e2;color:var(--bad);border-color:#f1c7c2}
+  .tag.warn{background:#fbeed2;color:#a5701a;border-color:#f0dcb0}
+
+  /* ---------- 视频 ---------- */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .stage{
+    position:relative;background:#1b2019;border-radius:0 0 13px 13px;overflow:hidden;
+    aspect-ratio:16/9;
+  }
+  .stage img{width:100%;height:100%;object-fit:contain;display:block}
+  .stage .placeholder{
+    position:absolute;inset:0;display:grid;place-content:center;text-align:center;
+    color:#6b7a63;gap:4px;font-size:12px;
+  }
+  .stage .placeholder .big{font-size:13px;color:#8b9a83}
+  .stage.live .placeholder{display:none}
+  .stage .hud{
+    position:absolute;left:10px;top:10px;display:none;align-items:center;gap:5px;
+    background:rgba(20,26,20,.55);color:#e8f5e4;font-size:11px;padding:3px 9px;
+    border-radius:999px;backdrop-filter:blur(4px);letter-spacing:.5px;
+  }
+  /* LIVE 角标只在真正收到帧之后出现：
+     一开始就显示会在"端口没起"的黑屏上挂个 LIVE，比不显示更误导。 */
+  .stage.live .hud{display:flex}
+  .stage .hud i{width:6px;height:6px;border-radius:50%;background:#59d38b;display:block}
+  /* 识别名字气泡：贴着画面左下角，和右侧卡片同源同时刷新 */
+  .who{
+    position:absolute;left:10px;bottom:10px;display:none;align-items:baseline;gap:8px;
+    background:rgba(24,32,24,.72);color:#fff;padding:6px 13px;border-radius:10px;
+    backdrop-filter:blur(6px);border:1px solid rgba(120,230,180,.35);
+  }
+  .who.show{display:flex}
+  .who .n{font-size:15px;font-weight:700;letter-spacing:.6px}
+  .who .s{font-size:11px;color:#b8e6cf}
+  .who.miss{border-color:rgba(240,160,140,.5)}
+  .who.miss .s{color:#f3c4b8}
+  .foot{
+    display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid #f0e8d6;
+    font-size:11.5px;color:var(--mut);flex-wrap:wrap;
+  }
+
+  /* ---------- 右栏 ---------- */
+  .cur{
+    display:flex;gap:12px;align-items:center;padding:14px;
+    background:linear-gradient(135deg,#fff8e6,#fdf1d4);
+  }
+  .cur .ico{
+    width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:20px;
+    background:#fff;border:1px solid #efe0bd;flex:none;
+  }
+  .cur .k{font-size:11.5px;color:var(--mut);letter-spacing:.5px}
+  .cur .v{font-size:19px;font-weight:800;letter-spacing:.5px;line-height:1.25}
+  .cur .d{font-size:11.5px;color:var(--ink2);margin-top:2px}
+  .cur.hit  .v{color:var(--ok)}
+  .cur.miss .v{color:var(--bad)}
+  .cur.busy .v{color:var(--warn)}
+
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:12.5px}
+  .kv span{color:var(--mut)}
+  .kv b{font-weight:600;color:var(--ink);max-width:62%;text-align:right;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kv b.hit{color:var(--ok)} .kv b.miss{color:var(--bad)}
+  .sep{height:1px;background:#f2ebdb;margin:8px 0}
+
+  /* ---------- 统计条 ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        box-shadow:var(--sh);padding:12px 14px}
+  .stat .k{font-size:11.5px;color:var(--mut);letter-spacing:.5px}
+  .stat .v{font-size:22px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums}
+  .stat .v small{font-size:12px;font-weight:600;color:var(--ink2);margin-left:3px}
+  .stat .d{font-size:11px;color:var(--mut);margin-top:2px}
+  .stat .bar{height:4px;border-radius:99px;background:#f0e8d6;overflow:hidden;margin-top:8px}
+  .stat .bar i{display:block;height:100%;width:0;background:var(--teal);transition:.4s}
+  .stat .bar i.warn{background:var(--warn)} .stat .bar i.er{background:var(--bad)}
+
+  /* ---------- 图像参数 ---------- */
+  .img2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 26px}
+  .sld{display:flex;flex-direction:column;gap:5px}
+  .sld label{display:flex;justify-content:space-between;font-size:12px;color:var(--ink2)}
+  .sld label b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;height:4px;border-radius:99px;
+    background:#ece3cf;outline:none;margin:6px 0 4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#fff;border:3px solid var(--amber);cursor:pointer;
+    box-shadow:0 1px 4px rgba(180,140,60,.35);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:#fff;border:3px solid var(--amber);
+    cursor:pointer;
+  }
+  select{
+    height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;
+    color:var(--ink);font-size:12.5px;padding:0 8px;outline:none;
+  }
+  button{
+    height:31px;padding:0 14px;border-radius:9px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);font-size:12.5px;cursor:pointer;
+    transition:.15s;font-family:inherit;
+  }
+  button:hover{background:#fdf8ec;border-color:#dfd0ae}
+  button:active{transform:translateY(1px)}
+  button.pri{background:linear-gradient(145deg,#e8b455,#d99b2b);color:#fff;border-color:#cf9130;
+             font-weight:600;box-shadow:0 3px 10px rgba(217,155,43,.3)}
+  button.pri:hover{filter:brightness(1.04)}
+  button.on{background:var(--teal-soft);border-color:#9ed8ce;color:#12786d;font-weight:600}
+  button.ghost{background:transparent}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input[type=text]{
+    height:31px;flex:1;min-width:110px;border-radius:9px;border:1px solid var(--line);
+    padding:0 10px;font-size:12.5px;color:var(--ink);background:#fff;outline:none;
+    font-family:inherit;
+  }
+  input[type=text]:focus,input[type=file]:focus{border-color:var(--amber)}
+  input[type=file]{font-size:11.5px;color:var(--ink2);max-width:100%}
+
+  /* ---------- 时间线 / 相册 ---------- */
+  .split{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:14px}
+  .tl{max-height:260px;overflow:auto}
+  .tl .it{display:flex;gap:10px;padding:8px 14px;border-bottom:1px dashed #f0e8d6}
+  .tl .it:last-child{border-bottom:0}
+  .tl .dotcol{width:11px;flex:none;display:flex;justify-content:center;padding-top:5px}
+  .tl .dotcol i{width:8px;height:8px;border-radius:50%;background:var(--teal);
+                box-shadow:0 0 0 3px rgba(31,157,143,.13)}
+  .tl .dotcol i.warn{background:var(--amber);box-shadow:0 0 0 3px rgba(217,155,43,.15)}
+  .tl .dotcol i.er{background:var(--bad);box-shadow:0 0 0 3px rgba(193,72,58,.15)}
+  .tl .tx{min-width:0}
+  .tl .t1{font-size:12.5px;color:var(--ink)}
+  .tl .t2{font-size:11px;color:var(--mut);margin-top:1px}
+  .empty{padding:22px 14px;text-align:center;color:var(--mut);font-size:12px}
+
+  .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px;
+       padding:12px 14px;max-height:300px;overflow:auto}
+  .shot{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);
+        background:#20261e;aspect-ratio:4/3;cursor:zoom-in}
+  .shot img{width:100%;height:100%;object-fit:cover;display:block}
+  .shot .m{position:absolute;left:0;right:0;bottom:0;padding:12px 7px 5px;
+           background:linear-gradient(transparent,rgba(10,14,10,.78));color:#eaf3e6;
+           font-size:10.5px;display:flex;justify-content:space-between;gap:6px}
+  .shot .x{position:absolute;right:5px;top:5px;width:20px;height:20px;border-radius:50%;
+           background:rgba(15,20,15,.62);color:#fff;border:0;font-size:13px;line-height:1;
+           cursor:pointer;display:grid;place-items:center;padding:0}
+  .shot .x:hover{background:var(--bad)}
+  .shot .ty{position:absolute;left:5px;top:5px;font-size:10px;padding:1px 6px;border-radius:99px;
+            background:rgba(15,20,15,.62);color:#dfeee0}
+  .shot .ty.ai{background:rgba(31,157,143,.85)}
+  .shot .ty.warn{background:rgba(217,155,43,.9)}
+  .shot .ty.er{background:rgba(193,72,58,.9)}
+
+  /* 大图 */
+  .lb{position:fixed;inset:0;background:rgba(28,24,16,.82);display:none;
+      place-items:center;z-index:99;padding:24px}
+  .lb.show{display:grid}
+  .lb img{max-width:92vw;max-height:82vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .lb .bar{display:flex;gap:10px;margin-top:12px;justify-content:center}
+  .lb a{color:#fff;font-size:12.5px;text-decoration:none;border:1px solid rgba(255,255,255,.4);
+        padding:6px 14px;border-radius:999px}
+
+  .log{height:132px;overflow:auto;padding:8px 14px;font-size:12px;
+       font-family:ui-monospace,Consolas,monospace}
+  .log div{padding:1px 0;color:var(--ink2)}
+  .log .t{color:#a99a80;margin-right:8px}
+  .log .ok{color:var(--ok)} .log .er{color:var(--bad)}
+
+  @media (max-width:1180px){
+    .grid{grid-template-columns:1fr}
+    .split{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .img2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <div class="bname">SENTINEL</div>
+      <div class="bsub">MC632X · 双屏 AI 侦测</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chip"><span class="dot" id="dot"></span><b id="conn">连接中</b></div>
+  <div class="chip clock" id="clock">--:--:--</div>
+</header>
+
+<div class="grid">
+  <!-- 左：双画面 -->
+  <div class="col">
+    <div class="duo">
+      <div class="card">
+        <div class="card-h">实拍画面<span class="spacer"></span>
+          <span class="tag" id="tag0">:1111</span></div>
+        <div class="stage" id="stage0">
+          <img id="stream0" alt="cam0">
+          <div class="hud"><i></i><span>LIVE</span></div>
+          <div class="placeholder">
+            <div class="big">暂无视频流</div>
+            <div>G0 · MJPEG :1111</div>
+          </div>
+        </div>
+        <div class="foot">LCD 通道 0 · G0 1080P · MJPEG</div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">AI 主路<span class="spacer"></span>
+          <span class="tag" id="tag1">:1112</span></div>
+        <div class="stage" id="stage1">
+          <img id="stream1" alt="cam1">
+          <div class="hud"><i></i><span>LIVE</span></div>
+          <div class="who" id="who1"><span class="n">—</span><span class="s"></span></div>
+          <div class="placeholder">
+            <div class="big">暂无视频流</div>
+            <div>G1CH1 · MJPEG :1112</div>
+          </div>
+        </div>
+        <div class="foot">识别抓帧源 · G1CH1 800×480 · 供人脸/证据共用</div>
+      </div>
+    </div>
+
+    <!-- 统计条 -->
+    <div class="stats">
+      <div class="stat">
+        <div class="k">已登记人数</div>
+        <div class="v" id="st-people">—</div>
+        <div class="d" id="st-people-d">等待识别引擎</div>
+      </div>
+      <div class="stat">
+        <div class="k">证据留存</div>
+        <div class="v"><span id="st-evi">0</span><small id="st-evi-cap">/ — 张</small></div>
+        <div class="d">掉电即清，需要留档请点图下载</div>
+      </div>
+      <div class="stat">
+        <div class="k">当前状态</div>
+        <div class="v" id="st-state">—</div>
+        <div class="d" id="st-state-d">—</div>
+      </div>
+      <div class="stat">
+        <div class="k">识别引擎</div>
+        <div class="v" id="st-engine">—</div>
+        <div class="d" id="st-engine-d">—</div>
+      </div>
+    </div>
+
+    <!-- 设备状态 -->
+    <div class="card">
+      <div class="card-h">设备状态<span class="spacer"></span>
+        <span class="hint">实时轮询 2s</span></div>
+      <div class="stats" style="padding:12px 14px;gap:10px">
+        <div class="stat" style="box-shadow:none;background:transparent;border:0;padding:0"
+             title="空闲钩子按 tick 采样，是近似值（负载越集中，低估越多）">
+          <div class="k">CPU 占用</div>
+          <div class="v" id="s-cpu">—</div>
+          <div class="bar"><i id="s-cpu-bar"></i></div>
+        </div>
+        <div class="stat" style="box-shadow:none;background:transparent;border:0;padding:0">
+          <div class="k">内存占用</div>
+          <div class="v"><span id="s-mem-use">—</span><small id="s-mem-tot"></small></div>
+          <div class="bar"><i id="s-mem-bar"></i></div>
+        </div>
+        <div class="stat" style="box-shadow:none;background:transparent;border:0;padding:0">
+          <div class="k">运行时长</div>
+          <div class="v" id="s-up">—</div>
+          <div class="d" id="s-up-d">—</div>
+        </div>
+        <div class="stat" style="box-shadow:none;background:transparent;border:0;padding:0">
+          <div class="k">板卡 IP</div>
+          <div class="v" style="font-size:16px" id="s-ip">—</div>
+          <div class="d" id="s-os">—</div>
+        </div>
+      </div>
+      <div class="foot" style="border-top:1px solid #f0e8d6">
+        <span>固件 <b id="s-fw">—</b></span>
+        <span style="margin-left:auto">峰值堆 <b id="s-mem-pk">—</b></span>
+      </div>
+      <!-- 绊线运行态：不接串口也能判断"到底哪一环没动" -->
+      <div class="foot" style="border-top:1px solid #f0e8d6">
+        <span title="规则线在 G1 800x480 坐标里的位置">绊线 <b id="s-ivs">—</b></span>
+        <span style="margin-left:auto" title="检出人数 / 目标中心点 x">检出 <b id="s-det">—</b></span>
+      </div>
+    </div>
+
+    <!-- 图像参数 -->
+    <div class="card">
+      <div class="card-h">图像参数<span class="spacer"></span>
+        <span class="tag" id="img-tag">ISP</span></div>
+      <div class="pad">
+        <div class="img2">
+          <div class="sld">
+            <label>作用路</label>
+            <select id="r-dev">
+              <option value="-1">两路同时</option>
+              <option value="0">实拍（G0）</option>
+              <option value="1">AI 主路（G1）</option>
+            </select>
+          </div>
+          <div class="sld">
+            <label>亮度 <b id="v-brt">0</b></label>
+            <input type="range" id="r-brt" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="sld">
+            <label>对比度 <b id="v-crt">100%</b></label>
+            <input type="range" id="r-crt" min="40" max="220" step="1" value="100">
+          </div>
+          <div class="sld">
+            <label>饱和度 <b id="v-sat">100%</b></label>
+            <input type="range" id="r-sat" min="0" max="320" step="1" value="100">
+          </div>
+          <div class="sld">
+            <label>红增益 <b id="v-rgn">0%</b></label>
+            <input type="range" id="r-rgn" min="-50" max="50" step="1" value="0">
+          </div>
+          <div class="sld">
+            <label>绿增益 <b id="v-ggn">0%</b></label>
+            <input type="range" id="r-ggn" min="-50" max="50" step="1" value="0">
+          </div>
+          <div class="sld">
+            <label>蓝增益 <b id="v-bgn">0%</b></label>
+            <input type="range" id="r-bgn" min="-50" max="50" step="1" value="0">
+          </div>
+          <div class="sld">
+            <label>图像模式</label>
+            <select id="r-mode">
+              <option value="0">标准</option>
+              <option value="1">明亮</option>
+              <option value="2">柔和</option>
+              <option value="3">鲜艳</option>
+              <option value="4">夜视</option>
+              <option value="-1">自定义</option>
+            </select>
+          </div>
+          <div class="sld">
+            <label>白平衡</label>
+            <select id="r-wb">
+              <option value="0">自动</option>
+              <option value="1">偏暖</option>
+              <option value="2">偏冷</option>
+              <option value="-1">自定义</option>
+            </select>
+          </div>
+          <div class="sld">
+            <label>画面方向</label>
+            <div class="row">
+              <button id="btn-mir" style="flex:1">水平镜像</button>
+              <button id="btn-flp" style="flex:1">垂直翻转</button>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+          <button class="ghost" id="btn-img-reset">恢复出厂值</button>
+          <button class="pri" id="btn-img-neutral">一键校色</button>
+          <button class="ghost" id="btn-img-wauto">白平衡自动</button>
+          <span class="hint" id="img-hint" style="font-size:11.5px;color:var(--mut)">
+            选中「AI 主路」再点「一键校色」，直接把该路白平衡锁到中性
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 时间线 + 相册 -->
+    <div class="split">
+      <div class="card">
+        <div class="card-h">事件时间线<span class="spacer"></span>
+          <span class="hint" id="tl-hint">—</span></div>
+        <div class="tl" id="tl"><div class="empty">还没有事件</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">证据相册<span class="spacer"></span>
+          <span class="hint" id="gal-hint">—</span>
+          <button class="pri" id="btn-snap" style="height:26px;padding:0 12px;font-size:11.5px">
+            抓拍存证</button>
+          <button id="btn-gal-clear" title="清空相册里的全部证据"
+                  style="height:26px;padding:0 10px;font-size:11.5px;margin-left:6px">清空</button>
+        </div>
+        <div class="gal" id="gal">
+          <div class="empty" style="grid-column:1/-1">点「抓拍存证」留一张现场图</div>
+        </div>
+        <div id="gal-pager" style="display:none;align-items:center;justify-content:center;gap:10px;padding:8px 0 2px">
+          <button id="gal-prev" style="height:24px;padding:0 10px;font-size:11.5px">‹ 上一页</button>
+          <span id="gal-page" style="font-size:11.5px;opacity:.75">1 / 1</span>
+          <button id="gal-next" style="height:24px;padding:0 10px;font-size:11.5px">下一页 ›</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右栏 -->
+  <div class="col">
+    <div class="card">
+      <div class="card-h">当前<span class="spacer"></span>
+        <span class="tag" id="f-tag">待机</span></div>
+      <div class="cur" id="cur-box">
+        <div class="ico" id="cur-ico">◎</div>
+        <div>
+          <div class="k" id="cur-k">识别结果</div>
+          <div class="v" id="cur-v">—</div>
+          <div class="d" id="cur-d">还没开始识别</div>
+        </div>
+      </div>
+      <div class="pad" style="padding-top:6px">
+        <div class="kv"><span>后端</span><b id="f-mode">—</b></div>
+        <div class="kv"><span>抓帧源</span><b id="f-src">—</b></div>
+        <div class="kv"><span>已登记</span><b id="f-ref">—</b></div>
+        <div class="kv"><span>耗时</span><b id="f-ms">—</b></div>
+        <div class="sep"></div>
+        <div class="row">
+          <button class="pri" id="btn-face" style="flex:1">识别一次</button>
+          <button id="btn-auto" style="flex:1">连续识别</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="f-name" placeholder="姓名，如 张三" maxlength="8">
+          <button id="btn-enroll">登记</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="file" id="f-file" accept="image/*">
+          <button id="btn-upload">上传登记</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="ghost" id="btn-clear" style="flex:1">清除已登记</button>
+          <button class="ghost" id="btn-reset" style="flex:1">强制解锁</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">语音指令<span class="spacer"></span>
+        <span class="tag" id="asr-tag">待机</span></div>
+      <div class="pad" style="padding-top:8px">
+        <div class="kv"><span>识别文本</span><b id="s-asr">—</b></div>
+        <div class="kv"><span>诊断</span><b id="s-asr-err">—</b></div>
+        <div class="kv"><span>最近指令</span><b id="s-cmd">—</b></div>
+        <div class="bar" style="height:5px;border-radius:99px;background:#f0e8d6;overflow:hidden;
+                  margin:8px 0 10px">
+          <i id="asr-bar" style="display:block;height:100%;width:0;background:var(--teal);
+             transition:.2s"></i>
+        </div>
+        <div class="row">
+          <button class="pri" id="btn-asr" style="flex:1">说 6 秒</button>
+          <button id="btn-reboot" style="flex:1">重启</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">语音对讲<span class="spacer"></span>
+        <span class="tag" id="tk-tag">未开启</span></div>
+      <div class="pad" style="padding-top:8px">
+        <div class="kv"><span>板端麦克风</span><b id="tk-st">未开启</b></div>
+        <div class="kv"><span>现场电平</span><b id="tk-lv">0</b></div>
+        <div class="bar" style="height:5px;border-radius:99px;background:#f0e8d6;overflow:hidden;
+                  margin:8px 0 10px">
+          <i id="tk-bar" style="display:block;height:100%;width:0;background:var(--amber);
+             transition:.12s"></i>
+        </div>
+        <div class="row">
+          <button class="pri" id="btn-talk" style="flex:1">开启对讲</button>
+          <button id="btn-listen" style="flex:1">听现场 3 秒</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="btn-mic" style="flex:1">按住说话（送到板端）</button>
+        </div>
+        <div class="hint" style="font-size:11px;color:var(--mut);margin-top:8px;line-height:1.6">
+          开启后语音识别会让位，两边不能同时用。首次开启约 5 秒预热。
+          浏览器只在 localhost / HTTPS 下允许取麦克风；直接输 IP 会被拦。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">控制台<span class="spacer"></span>
+        <span class="hint">等同串口 msh</span></div>
+      <div class="pad">
+        <div class="row">
+          <input type="text" id="cmd" placeholder="例如 vlcview -p 1246">
+          <button class="pri" id="btn-send">发送</button>
+        </div>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="lb" id="lb">
+  <div>
+    <img id="lb-img" alt="evidence">
+    <div class="bar">
+      <a id="lb-dl" download="evidence.jpg">下载原图</a>
+      <a href="javascript:void(0)" id="lb-close">关闭</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var $ = function(id){ return document.getElementById(id); };
+  var QS = new URLSearchParams(location.search);
+  var DEMO = QS.get('demo') === '1';
+  var HOST = location.hostname || '192.168.137.100';
+
+  function api(p){ return p; }
+  function log(msg, cls){
+    var box = $('log');
+    if(!box) return;
+    var d = document.createElement('div');
+    var t = new Date().toTimeString().slice(0,8);
+    var s1 = document.createElement('span');
+    s1.className = 't'; s1.textContent = t;
+    var s2 = document.createElement('span');
+    s2.className = cls || ''; s2.textContent = msg;
+    d.appendChild(s1); d.appendChild(s2);
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+    while(box.childNodes.length > 200) box.removeChild(box.firstChild);
+  }
+
+  function fetchText(p){
+    return fetch(api(p), {cache:'no-store'}).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    });
+  }
+
+  /* ---------- 时钟 ---------- */
+  setInterval(function(){
+    var d = new Date();
+    var p = function(n){ return n < 10 ? '0' + n : '' + n; };
+    $('clock').textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }, 1000);
+
+  /* ---------- 双路视频 ----------
+     multipart 流传输中 img.complete 恒为 false，只据此判活；
+     不能靠 onload 的重入，浏览器对 multipart 只触发一次 onload。 */
+  var CAMS = [
+    {i:0, name:'实拍画面', port:1111, url: QS.get('stream')  || ('http://' + HOST + ':1111/')},
+    {i:1, name:'AI 主路', port:1112, url: QS.get('stream2') || ('http://' + HOST + ':1112/')}
+  ];
+  CAMS.forEach(function(c){ c.live = false; c.retry = null; });
+
+  function markLive(c){
+    if(c.live) return;
+    c.live = true;
+    c.warned = false;           /* 下次掉线还要能再报一次 */
+    if(c.retry){ clearTimeout(c.retry); c.retry = null; }
+    $('stage' + c.i).classList.add('live');
+    var t = $('tag' + c.i);
+    t.className = 'tag on'; t.textContent = ':' + c.port + ' LIVE';
+    $('dot').classList.add('on');
+    $('conn').textContent = '已连接';
+    log(c.name + ' 视频流已连接 (:' + c.port + ')', 'ok');
+  }
+
+  function markDead(c, why){
+    c.live = false;
+    $('stage' + c.i).classList.remove('live');
+    var t = $('tag' + c.i);
+    t.className = 'tag er'; t.textContent = ':' + c.port + ' ' + why;
+  }
+
+  function connectCam(c){
+    var img = $('stream' + c.i);
+    c.live = false;
+    $('stage' + c.i).classList.remove('live');
+    img.removeAttribute('src');
+    img.src = c.url + '?t=' + Date.now();
+    img.onload = function(){ markLive(c); };
+    img.onerror = function(){
+      markDead(c, '无服务');
+      /* 只在第一次掉线时写一条日志。5 秒重试一次，每轮都写会把
+         整个日志面板刷成同一句话，别的问题反而看不见了。 */
+      if(!c.warned){
+        c.warned = true;
+        log(c.name + ' :' + c.port + ' 未就绪，先执行 vlcview -p 1246', 'er');
+      }
+      if(c.retry) clearTimeout(c.retry);
+      c.retry = setTimeout(function(){ connectCam(c); }, 5000);
+    };
+  }
+
+  function tick(){
+    if(DEMO){ CAMS.forEach(markLive); return; }
+    CAMS.forEach(function(c){
+      var img = $('stream' + c.i);
+      if(img.naturalWidth > 0 && img.complete === false) markLive(c);
+    });
+  }
+  setInterval(tick, 1000);
+  CAMS.forEach(connectCam);
+
+  /* ---------- 状态渲染 ---------- */
+
+  function setTag(id, txt, cls){
+    var t = $(id);
+    if(!t) return;
+    t.textContent = txt;
+    t.className = 'tag' + (cls ? ' ' + cls : '');
+  }
+
+  function pctBar(el, pct){
+    if(!el) return;
+    el.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    el.className = pct >= 85 ? 'er' : (pct >= 60 ? 'warn' : '');
+  }
+
+  function renderMem(s){
+    var tot = s.mem_tot | 0, use = s.mem_use | 0, pk = s.mem_pk | 0;
+    if(!tot){
+      $('s-mem-use').textContent = '—';
+      $('s-mem-tot').textContent = '';
+      return;
+    }
+    $('s-mem-use').textContent = (use / 1024).toFixed(2) + ' MB';
+    $('s-mem-tot').textContent = '/ ' + (tot / 1024).toFixed(1) + ' MB';
+    $('s-mem-pk').textContent = (pk / 1024).toFixed(2) + ' MB';
+    pctBar($('s-mem-bar'), Math.round(use * 100 / tot));
+  }
+
+  function renderCpu(s){
+    var c = (s.cpu === undefined) ? -1 : (s.cpu | 0);
+    if(c < 0){
+      $('s-cpu').textContent = '—';
+      $('s-cpu-bar').style.width = '0';
+      return;
+    }
+    $('s-cpu').innerHTML = c + '<small>%</small>';
+    pctBar($('s-cpu-bar'), c);
+  }
+
+  function renderUp(s){
+    var up = s.uptime || '—';
+    $('s-up').textContent = up;
+    var p = up.split(':');
+    if(p.length === 3){
+      $('s-up-d').textContent = '约 ' + p[0] + ' 小时 ' + p[1] + ' 分';
+    }
+  }
+
+  function renderSys(s){
+    $('s-ip').textContent = s.ip || '—';
+    $('s-os').textContent = s.s_ver || '—';
+    $('s-fw').textContent = s.fw_ver || '—';
+    $('st-evi').textContent = (s.evi | 0);
+
+    /* 容量跟着固件走：以前这里写死成 "/ 6 张"，EVI_SLOTS 改到 50 之后
+       还一直显示 6，看着像是没生效。evi_cap 由 /api/state 带回来。 */
+    if(s.evi_cap > 0) $('st-evi-cap').textContent = '/ ' + s.evi_cap + ' 张';
+
+    /*
+      绊线运行态。这一行是为了让人不看串口也能判断"为什么不报"：
+        ivs_n=0            → IVS 线程没起来（多半是 persondet.nbg 没放）
+        det=0              → 线程在跑但一个目标都没检出，跟线位置无关
+        cx 和 line 对比    → 人在线的哪一侧；人一直没跨过 line 就不会报，
+                             这是几何问题，不是判定坏了
+    */
+    var ivsEl = $('s-ivs'), detEl = $('s-det');
+    if(ivsEl){
+      ivsEl.textContent = (s.ivs_n > 0)
+        ? ('x=' + s.ivs_ln + ' / 运行中')
+        : '未运行';
+      ivsEl.style.color = (s.ivs_n > 0) ? '' : 'var(--mut)';
+    }
+    if(detEl){
+      if(s.ivs_n > 0){
+        var cx = (s.ivs_cx < 0) ? '无目标' : ('cx=' + s.ivs_cx);
+        detEl.textContent = (s.ivs_det | 0) + ' 人 · ' + cx;
+      }else{
+        detEl.textContent = '—';
+      }
+    }
+  }
+
+  /* 图像参数：板端给的是驱动原始值，这里换算成人类能读的刻度。
+     对比度 U2.6（64 = 1.0 倍）、饱和度 U3.5（32 = 1.0 倍）。 */
+  var CRT_UNIT = 64, SAT_UNIT = 32;
+
+  function syncRange(rid, vid, val, fmt){
+    var r = $(rid);
+    if(!r) return;
+    /* 正在拖的滑块绝不能被轮询回写，否则手指还没松就被弹回去 */
+    if(document.activeElement === r) return;
+    if(parseInt(r.value, 10) === val){ $(vid).textContent = fmt(val); return; }
+    r.value = val;
+    $(vid).textContent = fmt(val);
+  }
+
+  function renderImg(s){
+    if(s.i_ok === undefined) return;
+    setTag('img-tag', s.i_ok ? 'ISP 就绪' : 'ISP 未就绪', s.i_ok ? 'on' : 'warn');
+    if(!s.i_ok) return;
+
+    /* 作用路：板端记着上一次选的，刷新页面后要跟着它，否则滑块看着是
+       “AI 主路”的值、实际发出去却带着别的 dev。
+       用户刚点完下拉时焦点还在 select 上，这时候绝不能回写 —— 否则
+       切过去的一瞬间会被上一轮轮询的结果弹回旧值。 */
+    var dv = (s.i_dev === undefined) ? -1 : (s.i_dev | 0);
+    if(document.activeElement !== $('r-dev')){
+      imgDev = dv;
+      $('r-dev').value = String(dv);
+    }
+
+    syncRange('r-brt', 'v-brt', s.i_brt | 0, function(v){
+      return (v > 0 ? '+' : '') + v;
+    });
+    syncRange('r-crt', 'v-crt', Math.round((s.i_crt | 0) * 100 / CRT_UNIT), function(v){
+      return v + '%';
+    });
+    syncRange('r-sat', 'v-sat', Math.round((s.i_sat | 0) * 100 / SAT_UNIT), function(v){
+      return v + '%';
+    });
+
+    /* 红/绿/蓝增益是**相对该路基线**的百分比，所以直接显示 ±N%。
+       绿通道专门用来压品红：AI 主路常见整片发紫，抬绿比压红蓝更保亮度。 */
+    syncRange('r-rgn', 'v-rgn', (s.i_rgn === undefined) ? 0 : (s.i_rgn | 0), function(v){
+      return (v > 0 ? '+' : '') + v + '%';
+    });
+    syncRange('r-ggn', 'v-ggn', (s.i_ggn === undefined) ? 0 : (s.i_ggn | 0), function(v){
+      return (v > 0 ? '+' : '') + v + '%';
+    });
+    syncRange('r-bgn', 'v-bgn', (s.i_bgn === undefined) ? 0 : (s.i_bgn | 0), function(v){
+      return (v > 0 ? '+' : '') + v + '%';
+    });
+
+    var m = (s.i_mode === undefined) ? -1 : (s.i_mode | 0);
+    if(document.activeElement !== $('r-mode')) $('r-mode').value = String(m < 0 ? -1 : m);
+
+    var wb = (s.i_wb === undefined) ? 0 : (s.i_wb | 0);
+    if(document.activeElement !== $('r-wb')) $('r-wb').value = String(wb);
+
+    $('btn-mir').classList.toggle('on', !!s.i_mir);
+    $('btn-flp').classList.toggle('on', !!s.i_flp);
+
+    /* 白平衡锁没锁住，直接写在提示行上。
+       锁住(mwb=1)之后再偏色，就只能是 sensor / 镜头 / 滤光片的问题，
+       软件这边已经没得调了 —— 这句话能省掉一轮无效来回。 */
+    var hint = $('img-hint');
+    if(hint){
+      hint.textContent = s.i_mwb
+        ? '白平衡已锁定（' + devName(imgDev) + '）；仍偏色则是镜头/滤光片，软件已到极限'
+        : '选中「AI 主路」再点「一键校色」，直接把该路白平衡锁到中性';
+    }
+  }
+
+  /* 人脸结果。名字只有一处真相：每次轮询按 f_nm 重刷气泡 + 卡片，
+     不缓存不累加 —— 人走了名字还挂着，那种假象最难解释。 */
+  function showWho(kind, name, sub, why){
+    var w = $('who1'), box = $('cur-box');
+    var nm = (name || '').trim();
+    var s2 = sub || '';
+    var nEl = w.querySelector('.n'), sEl = w.querySelector('.s');
+
+    if(kind === 'hit'){
+      w.className = 'who show';
+      nEl.textContent = nm || '未知';
+      sEl.textContent = s2;
+      box.className = 'cur hit';
+      $('cur-k').textContent = '已识别';
+      $('cur-v').textContent = nm || '未知';
+      $('cur-d').textContent = s2 ? ('相似 ' + s2) : '已匹配';
+      $('cur-ico').textContent = '✓';
+    }else if(kind === 'miss'){
+      w.className = 'who show miss';
+      nEl.textContent = '陌生人';
+      sEl.textContent = s2 ? ('最高 ' + s2) : '不在库中';
+      box.className = 'cur miss';
+      $('cur-k').textContent = '已识别';
+      $('cur-v').textContent = '陌生人';
+      var md = [];
+      if(s2)  md.push('最高 ' + s2);
+      if(why) md.push(why);
+      $('cur-d').textContent = md.length ? md.join(' · ') : '检测到人脸，但不在库里';
+      $('cur-ico').textContent = '!';
+    }else if(kind === 'none'){
+      w.className = 'who';
+      box.className = 'cur';
+      $('cur-k').textContent = '画面';
+      $('cur-v').textContent = '无人脸';
+      $('cur-d').textContent = s2 || '画面里没检测到人脸';
+      $('cur-ico').textContent = '◎';
+    }else if(kind === 'err'){
+      w.className = 'who';
+      box.className = 'cur miss';
+      $('cur-k').textContent = '识别失败';
+      $('cur-v').textContent = '失败';
+      $('cur-d').textContent = s2;
+      $('cur-ico').textContent = '✕';
+    }else if(kind === 'busy'){
+      w.className = 'who';
+      box.className = 'cur busy';
+      $('cur-k').textContent = '正在识别';
+      $('cur-v').textContent = '处理中';
+      $('cur-d').textContent = s2 || '抓帧并上传中，等一两秒';
+      $('cur-ico').textContent = '…';
+    }else{
+      w.className = 'who';
+      box.className = 'cur';
+      $('cur-k').textContent = '识别结果';
+      $('cur-v').textContent = '—';
+      $('cur-d').textContent = s2 || '还没开始识别';
+      $('cur-ico').textContent = '◎';
+    }
+  }
+
+  function faceMsgText(m){
+    if(!m || m === '-') return '—';
+    if(/^no-server tcp/.test(m))  return '连不上 PC 服务（先跑 face_server）';
+    if(/^no-server dns/.test(m))  return 'PC 主机名解析失败';
+    if(/^tls handshake/.test(m))  return 'TLS 握手失败';
+    if(/mjpeg not enabled/.test(m)) return '抓帧通道没开（跑 vlcview -p 1246）';
+    if(/dmc subscribe/.test(m))   return '订阅表满，重启后先 vlcview';
+    if(/no frame in/.test(m))     return '没抓到帧';
+    if(/empty frame/.test(m))     return '抓到空帧';
+    if(/^frame .* > /.test(m))    return '帧超过 64KB 上限';
+    if(/^grab /.test(m))          return '抓帧失败 ' + m.replace('grab ', '');
+    if(/^ref add failed/.test(m)) return '写参考图失败 ' + m.replace(/^ref add failed\s*/, '');
+    if(m === 'no face')           return '画面里没检测到人脸';
+    if(m === 'enrolled')          return '已登记';
+    if(m === 'detect-only')       return 'PC 端只有检测、没有识别引擎';
+    if(m === 'recv-only')         return 'PC 端没装 OpenCV';
+    if(m === 'no face in photo')  return '照片里没检测到人脸';
+    if(m === 'no one enrolled')   return '还没有登记任何人';
+    if(/^score /.test(m))         return '最高分 ' + m.replace(/^score\s*/, '').split(' ')[0];
+    if(/^dist /.test(m))          return '距离 ' + m.replace(/^dist\s*/, '');
+    if(m === 'encode failed')     return '特征提取失败，换张清晰正面照';
+    if(m === 'lbph train failed') return 'PC 端特征库训练失败';
+    return m;
+  }
+
+  /* 板端只在「点识别 / 点登记」时才更新结果，两次之间卡片一直是同一条。
+     超过这个时长就不再当成"当前画面"——否则人早走了，卡片还挂着"已识别 张三"，
+     这是三种状态里最容易误读的一种。 */
+  var FACE_STALE_MS = 15000;
+
+  function agoText(ms){
+    var sec = Math.round(ms / 1000);
+    if(sec < 60)   return sec + ' 秒前';
+    if(sec < 3600) return Math.round(sec / 60) + ' 分钟前';
+    return Math.round(sec / 3600) + ' 小时前';
+  }
+
+  function renderFace(s){
+    renderFaceInner(s);
+
+    var age = (typeof s.f_age === 'number') ? s.f_age : -1;
+    if(age > FACE_STALE_MS){
+      /* 气泡只该挂在"此刻画面里的人"身上，旧结果一律收起 */
+      $('who1').className = 'who';
+      $('cur-k').textContent = '上次 · ' + agoText(age);
+      $('cur-d').textContent = '已过期，点「识别」重测';
+    }
+  }
+
+  function renderFaceInner(s){
+    var ref = s.f_ref | 0;
+    $('f-mode').textContent = (s.f_mode === 'xf') ? '讯飞云' : (s.f_mode === 'pc' ? 'PC 服务' : '—');
+    $('f-src').textContent  = s.f_src || '—';
+    $('f-ref').textContent  = ref + ' 人';
+    $('st-people').innerHTML = ref + '<small>人</small>';
+    $('st-people-d').textContent = ref ? '已建立特征索引' : '先登记一个人';
+    $('st-engine').textContent = (s.f_mode === 'xf') ? '讯飞' : 'PC-LBPH';
+    $('st-engine-d').textContent = (s.f_mode === 'xf') ? '云端 1:1 比对' : '局域网 PC 服务';
+
+    if(s.f_busy){
+      setTag('f-tag', '识别中…', 'warn');
+      showWho('busy');
+      return;
+    }
+
+    var sc = (s.f_sc | 0) / 1000;
+    var ms = s.f_ms | 0;
+    $('f-ms').textContent = ms ? ms + ' ms' : '—';
+
+    if(!s.f_ok && !ms){
+      setTag('f-tag', '待机', '');
+      $('st-state').textContent = '正常';
+      $('st-state-d').textContent = '无异常';
+      showWho('wait', '', ref ? '还没开始识别' : '先去登记一个人');
+      return;
+    }
+    if(!s.f_ok){
+      setTag('f-tag', '失败', 'er');
+      $('st-state').textContent = '异常';
+      $('st-state-d').textContent = faceMsgText(s.f_msg);
+      showWho('err', '', faceMsgText(s.f_msg));
+      return;
+    }
+    if(s.f_msg === 'enrolled'){
+      setTag('f-tag', '已登记', 'on');
+      $('st-state').textContent = '正常';
+      $('st-state-d').textContent = '刚登记：' + (s.f_nm || '?');
+      showWho('hit', s.f_nm, '登记成功');
+      return;
+    }
+    if(s.f_msg === 'no face'){
+      setTag('f-tag', '无人脸', 'warn');
+      $('st-state').textContent = '正常';
+      $('st-state-d').textContent = '画面无人';
+      showWho('none', '', '画面里没检测到人脸');
+      return;
+    }
+    if(s.f_msg === 'detect-only' || s.f_msg === 'recv-only' || s.f_msg === 'no one enrolled'){
+      setTag('f-tag', '待配置', 'warn');
+      $('st-state').textContent = '待配置';
+      $('st-state-d').textContent = faceMsgText(s.f_msg);
+      showWho('err', '', faceMsgText(s.f_msg));
+      return;
+    }
+    if(s.f_mt){
+      setTag('f-tag', '命中', 'on');
+      $('st-state').textContent = '正常';
+      $('st-state-d').textContent = '识别到 ' + (s.f_nm || '?');
+      showWho('hit', s.f_nm, sc ? sc.toFixed(3) : '');
+      if(s.f_nm && s.f_nm !== lastHit){ lastHit = s.f_nm; }
+      return;
+    }
+    var why = (s.f_msg && s.f_msg !== '-') ? faceMsgText(s.f_msg) : '';
+    setTag('f-tag', '陌生人', 'er');
+    $('st-state').textContent = '注意';
+    $('st-state-d').textContent = '检测到人脸，不在库中' + (why ? '（' + why + '）' : '');
+    showWho('miss', '', sc ? sc.toFixed(3) : '', why);
+  }
+
+  var lastHit = '';
+
+  /* ---------- 事件时间线 ---------- */
+  function upText(up){
+    var h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60), s = up % 60;
+    var p = function(n){ return n < 10 ? '0' + n : '' + n; };
+    return '开机 ' + p(h) + ':' + p(m) + ':' + p(s);
+  }
+
+  var EVT_TEXT = {
+    boot:'系统启动', snap:'抓拍存证', del:'删除证据',
+    img:'图像参数调整', face:'人脸识别', cmd:'执行指令', enroll:'登记人员'
+  };
+
+  function renderEvt(j){
+    var box = $('tl');
+    var items = (j && j.items) || [];
+    $('tl-hint').textContent = items.length ? (items.length + ' 条') : '—';
+    if(!items.length){
+      box.innerHTML = '<div class="empty">还没有事件</div>';
+      return;
+    }
+    var html = '';
+    for(var i = 0; i < items.length; i++){
+      var it = items[i];
+      var cls = (it.k === 'del') ? 'er' : (it.k === 'img' ? 'warn' : '');
+      var name = EVT_TEXT[it.k] || it.k;
+      html += '<div class="it"><div class="dotcol"><i class="' + cls + '"></i></div>' +
+              '<div class="tx"><div class="t1">' + name +
+              (it.t ? ' · ' + esc(it.t) : '') + '</div>' +
+              '<div class="t2">' + upText(it.up | 0) + '</div></div></div>';
+    }
+    box.innerHTML = html;
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  /* ---------- 证据相册 ---------- */
+  var TY_NAME = ['手动', '自动', '识别', '异常'];
+  var TY_CLS  = ['', 'ai', 'ai', 'warn'];
+
+  function demoThumb(it){
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+      '<stop offset="0" stop-color="#5d6b4f"/><stop offset="1" stop-color="#2c3529"/>' +
+      '</linearGradient></defs><rect width="320" height="240" fill="url(#g)"/>' +
+      '<rect x="76" y="52" width="168" height="140" fill="none" stroke="#ff6b5a" ' +
+      'stroke-width="3" rx="4"/><text x="160" y="228" fill="#dfeada" font-size="14" ' +
+      'text-anchor="middle" font-family="sans-serif">EVIDENCE #' + (it.id | 0) + '</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  /* 相册分页：一页 12 张。
+     服务端 /api/gallery 单次最多回 20 张（g_body 只有 1800B），
+     相册已经是 50 槽，一次全拉会被截断 → JSON.parse 抛错 → 页面显示"空"。 */
+  var GAL_PAGE = 12;
+  var galOff   = 0;
+
+  function renderGal(j){
+    var box = $('gal');
+    var items = (j && j.items) || [];
+    var tot = (j && typeof j.n === 'number') ? j.n : items.length;
+    var lim = (j && j.lim) || GAL_PAGE;
+    var off = (j && typeof j.off === 'number') ? j.off : 0;
+
+    galOff = off;
+    $('gal-hint').textContent = tot ? ((j.cap ? tot + ' / ' + j.cap : String(tot))) : '空';
+    /* 这里也同步一次容量：万一 /api/state 的 evi_cap 没带（旧固件），
+       相册接口返回的 cap 同样能纠正顶部那个 "/ 6 张"。 */
+    if(j && j.cap > 0) $('st-evi-cap').textContent = '/ ' + j.cap + ' 张';
+
+    /* 分页条：只有超过一页才显示 */
+    var pages = Math.max(1, Math.ceil(tot / lim));
+    var cur   = Math.floor(off / lim) + 1;
+    $('gal-pager').style.display = (tot > lim) ? 'flex' : 'none';
+    $('gal-page').textContent = cur + ' / ' + pages;
+    $('gal-prev').disabled = (off <= 0);
+    $('gal-next').disabled = (off + lim >= tot);
+
+    if(!items.length){
+      box.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+                      (tot ? '这一页空了，回上一页看看' : '点「抓拍存证」留一张现场图') +
+                      '</div>';
+      return;
+    }
+    var html = '';
+    for(var i = 0; i < items.length; i++){
+      var it = items[i];
+      var ty = it.ty | 0;
+      /* 演示模式没有板子，用 SVG 占位，版式才看得出来 */
+      var src = DEMO ? demoThumb(it) : ('/api/evi?id=' + it.id);
+      html += '<div class="shot" data-id="' + it.id + '">' +
+              '<img loading="lazy" src="' + src + '" alt="evi">' +
+              '<span class="ty ' + (TY_CLS[ty] || '') + '">' + (TY_NAME[ty] || '?') + '</span>' +
+              '<button class="x" data-del="' + it.id + '" title="删除">×</button>' +
+              '<div class="m"><span>' + upText(it.up | 0).replace('开机 ', '') + '</span>' +
+              '<span>' + Math.round((it.sz | 0) / 1024) + 'K</span></div></div>';
+    }
+    box.innerHTML = html;
+  }
+
+  $('gal').addEventListener('click', function(e){
+    var del = e.target.getAttribute && e.target.getAttribute('data-del');
+    if(del){
+      e.stopPropagation();
+      fetchText('/api/gallery?del=' + del).then(function(r){
+        log('删除证据 ' + del + ' → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+        refreshGal();
+      });
+      return;
+    }
+    var shot = e.target.closest ? e.target.closest('.shot') : null;
+    if(shot){
+      var id = shot.getAttribute('data-id');
+      $('lb-img').src = '/api/evi?id=' + id;
+      $('lb-dl').href = '/api/evi?id=' + id;
+      $('lb').classList.add('show');
+    }
+  });
+  $('lb-close').addEventListener('click', function(){ $('lb').classList.remove('show'); });
+  $('lb').addEventListener('click', function(e){
+    if(e.target === $('lb')) $('lb').classList.remove('show');
+  });
+
+  function refreshGal(off){
+    if(typeof off === 'number') galOff = off;
+    return fetchText('/api/gallery?off=' + galOff + '&lim=' + GAL_PAGE).then(function(t){
+      try{
+        var d = JSON.parse(t);
+        renderGal(d);
+        /* top 才是"全局最新一张的 id"；翻到第 2 页时 items[0].id 不是最新的，
+           拿它当版本号会让 poll 以为相册变了，每轮白拉一次 */
+        galVer = d.top | 0;
+      }catch(e){ log('相册数据解析失败', 'er'); }
+    }).catch(function(){});
+  }
+
+  /* 一键清空：二次确认，清完回到第一页 */
+  $('btn-gal-clear').addEventListener('click', function(){
+    if(!window.confirm('清空相册里的全部证据？此操作不可撤销。')) return;
+    fetchText('/api/gallery?clear=1').then(function(r){
+      log('清空相册 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      refreshGal(0);
+    });
+  });
+
+  $('gal-prev').addEventListener('click', function(){
+    if(galOff > 0) refreshGal(Math.max(0, galOff - GAL_PAGE));
+  });
+  $('gal-next').addEventListener('click', function(){
+    if(!this.disabled) refreshGal(galOff + GAL_PAGE);
+  });
+
+  $('btn-snap').addEventListener('click', function(){
+    var b = $('btn-snap');
+    b.disabled = true; b.textContent = '抓拍中…';
+    fetchText('/api/snap?t=0').then(function(r){
+      /* 板端失败码只有几个，这里翻译成人话 —— 现场没人会去猜 ERR:grab */
+      if(r.indexOf('OK') === 0){
+        log('抓拍已存入相册', 'ok');
+      }else if(r === 'ERR:busy'){
+        log('识别一直占着摄像头，等它停一秒再点', 'er');
+      }else if(r === 'ERR:grab'){
+        log('取不到画面：先确认 vlcview -p 1246 在跑', 'er');
+      }else if(r === 'ERR:not-init'){
+        log('相册模块没起来，看串口 [evi] 日志', 'er');
+      }else{
+        log('抓拍失败 → ' + r, 'er');
+      }
+      return refreshGal();
+    }).catch(function(e){
+      log('抓拍失败：' + e.message, 'er');
+    }).then(function(){
+      b.disabled = false; b.textContent = '抓拍存证';
+      fastPoll();
+    });
+  });
+
+  /* ---------- 图像参数交互 ---------- */
+  var imgTimer = null;
+  var imgDev = -1;          /* -1 两路 / 0 实拍 / 1 AI 主路 */
+
+  function devName(d){
+    return d === 0 ? '实拍（G0）' : d === 1 ? 'AI 主路（G1）' : '两路';
+  }
+
+  /* dev 一律显式带上：板端会记住上一次的选择，不带就等于"沿用"，
+     用户切回"两路"时会被记忆里的单路顶掉。 */
+  function sendImg(k, v){
+    return fetchText('/api/img?dev=' + imgDev + '&k=' + k + '&v=' + v).then(function(r){
+      if(r.indexOf('OK') !== 0){
+        log('画面参数 ' + k + '=' + v + ' → ' + r, 'er');
+      }
+      return r;
+    });
+  }
+
+  /* 拖动时按 200ms 防抖发送。
+     板子是单线程 HTTP，拖一次滑块会打出几十个请求，把状态轮询都堵住。 */
+  function bindSlider(rid, vid, key, conv, fmt){
+    var r = $(rid), v = $(vid);
+    r.addEventListener('input', function(){
+      var val = parseInt(r.value, 10);
+      v.textContent = fmt(val);
+      if(imgTimer) clearTimeout(imgTimer);
+      imgTimer = setTimeout(function(){
+        sendImg(key, conv(val)).then(function(){ fastPoll(); });
+      }, 200);
+    });
+  }
+
+  bindSlider('r-brt', 'v-brt', 'brt',
+    function(v){ return v; },
+    function(v){ return (v > 0 ? '+' : '') + v; });
+
+  bindSlider('r-crt', 'v-crt', 'crt',
+    function(v){ return Math.round(v * CRT_UNIT / 100); },
+    function(v){ return v + '%'; });
+
+  bindSlider('r-sat', 'v-sat', 'sat',
+    function(v){ return Math.round(v * SAT_UNIT / 100); },
+    function(v){ return v + '%'; });
+
+  /* 红/绿/蓝增益是现场修色偏的正解：1% 一档，看着画面拖，
+     比"偏暖/偏冷"的 12% 粗档好用得多。
+     整片发紫（品红）就抬绿；发青就压绿。 */
+  bindSlider('r-rgn', 'v-rgn', 'rgn',
+    function(v){ return v; },
+    function(v){ return (v > 0 ? '+' : '') + v + '%'; });
+
+  bindSlider('r-ggn', 'v-ggn', 'ggn',
+    function(v){ return v; },
+    function(v){ return (v > 0 ? '+' : '') + v + '%'; });
+
+  bindSlider('r-bgn', 'v-bgn', 'bgn',
+    function(v){ return v; },
+    function(v){ return (v > 0 ? '+' : '') + v + '%'; });
+
+  $('r-dev').addEventListener('change', function(){
+    imgDev = parseInt(this.value, 10);
+    if(isNaN(imgDev)) imgDev = -1;
+    /* 不带 k：只切作用路，板端回 OK:dev=N，随后拉一次 state 把滑块刷成该路的值 */
+    fetchText('/api/img?dev=' + imgDev).then(function(r){
+      log('画面参数作用于 ' + devName(imgDev) + ' → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  /* 一键校色 / 退回自动。
+     这两个命令不需要 v 参数，所以不能走 sendImg()（它固定拼 &v=）。
+     板端会阻塞 0.3 秒再复测一次，所以这里把按钮禁用，避免连点。 */
+  function neutralMsg(r){
+    if(r === 'OK:neutral')  return '已锁定到中性（可在红/绿/蓝上继续微调）';
+    if(r === 'OK:already')  return '本来就是中性，没有改动';
+    if(r === 'ERR:worse')   return '校完更偏，已整份回滚——偏色不在白平衡环节（详见串口 img）';
+    if(r === 'ERR:bad-stat')return 'AWB 统计值不可信（不在 0.25~4.0），没有动手';
+    if(r === 'ERR:no-isp')  return '读不到该路 AWB（ISP 没起来或这条通道没使能）';
+    if(r === 'ERR:no-dev')  return '没有可用的路';
+    return r;
+  }
+
+  $('btn-img-neutral').addEventListener('click', function(){
+    var self = this;
+    self.disabled = true;
+    fetchText('/api/img?dev=' + imgDev + '&k=neutral').then(function(r){
+      log('一键校色（' + devName(imgDev) + '）→ ' + neutralMsg(r), r.indexOf('OK') === 0 ? 'ok' : 'er');
+      self.disabled = false;
+      fastPoll();
+      setTimeout(fastPoll, 900);
+    }).catch(function(e){
+      log('一键校色失败：' + e.message, 'er');
+      self.disabled = false;
+    });
+  });
+
+  $('btn-img-wauto').addEventListener('click', function(){
+    fetchText('/api/img?dev=' + imgDev + '&k=wauto').then(function(r){
+      log('白平衡自动（' + devName(imgDev) + '）→ ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  $('r-mode').addEventListener('change', function(){
+    sendImg('mode', this.value).then(function(r){
+      log('图像模式 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  $('r-wb').addEventListener('change', function(){
+    sendImg('wb', this.value).then(function(r){
+      log('白平衡 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  $('btn-mir').addEventListener('click', function(){
+    var on = this.classList.contains('on') ? 0 : 1;
+    sendImg('mir', on).then(function(r){
+      log('水平镜像 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  $('btn-flp').addEventListener('click', function(){
+    var on = this.classList.contains('on') ? 0 : 1;
+    sendImg('flp', on).then(function(r){
+      log('垂直翻转 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  $('btn-img-reset').addEventListener('click', function(){
+    fetchText('/api/img?k=reset').then(function(r){
+      log('恢复出厂值 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      fastPoll();
+    });
+  });
+
+  /* ---------- 人脸按钮 ---------- */
+  function faceCmd(q){
+    return fetchText('/api/face?' + q).then(function(r){
+      log('人脸 → ' + r, r.indexOf('OK') === 0 ? 'ok' : 'er');
+      return r;
+    });
+  }
+
+  $('btn-face').addEventListener('click', function(){
+    faceCmd('m=run').then(refreshSoon);
+  });
+
+  var autoTimer = null;
+  $('btn-auto').addEventListener('click', function(){
+    var b = $('btn-auto');
+    if(autoTimer){
+      clearInterval(autoTimer); autoTimer = null;
+      b.classList.remove('on'); b.textContent = '连续识别';
+      log('连续识别已停止');
+      return;
+    }
+    b.classList.add('on'); b.textContent = '停止连续';
+    log('连续识别已开启（每 4 秒一次）');
+    var once = function(){ faceCmd('m=run'); };
+    once();
+    autoTimer = setInterval(once, 4000);
+  });
+
+  $('btn-enroll').addEventListener('click', function(){
+    var nm = ($('f-name').value || '').trim();
+    if(!nm){ log('先填姓名', 'er'); return; }
+    faceCmd('m=enroll&n=' + encodeURIComponent(nm)).then(refreshSoon);
+  });
+
+  $('btn-clear').addEventListener('click', function(){
+    faceCmd('m=clear').then(refreshSoon);
+  });
+
+  $('btn-reset').addEventListener('click', function(){
+    faceCmd('m=reset').then(refreshSoon);
+  });
+
+  /* 上传登记：浏览器先压到 640px / JPEG 0.72，再按板端 64KB 上限两级退让。
+     原图动辄 3MB，直接 POST 会撑爆板端 64KB 的参考图槽。 */
+  $('btn-upload').addEventListener('click', function(){
+    var f = $('f-file').files[0];
+    if(!f){ log('先选一张照片', 'er'); return; }
+    var nm = ($('f-name').value || '').trim();
+    if(!nm){ log('先填姓名（作为标签）', 'er'); return; }
+
+    var btn = this;
+    btn.disabled = true; btn.textContent = '压缩中…';
+
+    var img = new Image();
+    var url = URL.createObjectURL(f);
+    img.onload = function(){
+      var quota = 640, q = 0.72;
+
+      function encode(){
+        var s = Math.min(1, quota / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * s));
+        var h = Math.max(1, Math.round(img.height * s));
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        cv.toBlob(function(blob){
+          if(!blob){ done('压缩失败'); return; }
+          if(blob.size > 60000 && quota > 320){ quota -= 160; q -= 0.08; encode(); return; }
+          post(blob);
+        }, 'image/jpeg', q);
+      }
+
+      function post(blob){
+        btn.textContent = '上传中…';
+        fetch('/api/enroll?n=' + encodeURIComponent(nm), {
+          method:'POST',
+          headers:{'Content-Type':'image/jpeg'},
+          body: blob
+        }).then(function(r){ return r.text(); }).then(function(t){
+          log('上传登记 ' + nm + ' → ' + t, t.indexOf('OK') === 0 ? 'ok' : 'er');
+          done(null);
+        }).catch(function(e){ done(e.message); });
+      }
+
+      function done(err){
+        URL.revokeObjectURL(url);
+        btn.disabled = false; btn.textContent = '上传登记';
+        if(err) log('上传失败：' + err, 'er');
+        refreshSoon();
+      }
+
+      encode();
+    };
+    img.onerror = function(){
+      URL.revokeObjectURL(url);
+      btn.disabled = false; btn.textContent = '上传登记';
+      log('这张图打不开，换一张', 'er');
+    };
+    img.src = url;
+  });
+
+  /* ---------- 语音 / 命令 ---------- */
+  $('btn-asr').addEventListener('click', function(){
+    /* 对讲常开时麦克风流归 talk 线程，识别抢不到帧；与其让它跑一轮
+       必然失败的识别（要等十几秒），不如当场说清楚。 */
+    if($('btn-talk').classList.contains('on')){
+      log('对讲开着，语音识别会让位 —— 先关对讲再识别', 'er');
+      return;
+    }
+    fetchText('/api/cmd?c=' + encodeURIComponent('voice_test 6')).then(function(r){
+      log('语音识别 → ' + r, 'ok');
+      $('asr-bar').style.width = '0';
+      fastPoll();
+    });
+  });
+
+  $('btn-reboot').addEventListener('click', function(){
+    if(!confirm('确定重启板子？')) return;
+    fetchText('/api/cmd?c=' + encodeURIComponent('reboot')).then(function(r){
+      log('重启 → ' + r, 'er');
+    }).catch(function(){ log('板子已断开（正在重启）', 'er'); });
+  });
+
+  $('btn-send').addEventListener('click', function(){
+    var c = ($('cmd').value || '').trim();
+    if(!c) return;
+    fetchText('/api/cmd?c=' + encodeURIComponent(c)).then(function(r){
+      log('$ ' + c + ' → ' + r, r.indexOf('ERR') === 0 ? 'er' : 'ok');
+      fastPoll();
+    });
+  });
+  $('cmd').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') $('btn-send').click();
+  });
+
+  function renderAsr(s){
+    var ph = s.asr_ph | 0;
+    var tags = ['待机', '收敛中', '请说话', '录音中', '识别中', '失败'];
+    var cls  = ['', 'warn', 'warn', 'on', 'on', 'er'];
+    setTag('asr-tag', tags[ph] || '待机', cls[ph] || '');
+    $('s-asr').textContent = s.asr || '—';
+    $('s-asr-err').textContent = s.asr_err ? asrErrText(s.asr_err) : '—';
+    $('s-cmd').textContent = s.last_cmd || '—';
+
+    var tot = s.asr_tot | 0, el = s.asr_el | 0;
+    if(tot > 0 && el > 0){
+      $('asr-bar').style.width = Math.min(100, el * 100 / tot) + '%';
+    }else if(ph === 0 || ph === 5){
+      $('asr-bar').style.width = '0';
+    }
+  }
+
+  function asrErrText(e){
+    if(/mic not ready/.test(e))    return '麦克风没就绪（查 LINE IN 接线）';
+    if(/no speech/.test(e))        return '没听到声音（凑近点、说长些）';
+    if(/capture failed/.test(e))   return '采集失败';
+    if(/no server ip/.test(e))     return 'DNS 没解析出服务器';
+    if(/time not trusted/.test(e)) return '板子时间没校准';
+    if(/tls\/tcp failed/.test(e))  return '连不上讯飞';
+    if(/empty result/.test(e))     return '服务端回空结果';
+    return e;
+  }
+
+  /* ---------- 语音对讲 ----------
+     半双工：板端麦克风 -> 网页（听现场 /api/mic），
+             网页麦克风 -> 板端喇叭（/api/talkdown）。
+     板子只有一路 ACODEC，所以开启对讲时语音识别必须让位（板端会拒绝）。 */
+  var tkRec = false, tkStream = null, tkCtx = null, tkSrc = null, tkSp = null, tkMute = null;
+  var tkChunks = [], tkQueue = [], tkSending = false, tkBytes = 0;
+
+  function renderTalk(s){
+    var on = !!(s.talk | 0);
+    var lv = (s.t_lv === undefined) ? 0 : (s.t_lv | 0);
+    if(lv < 0) lv = 0;
+    if(lv > 100) lv = 100;
+    $('tk-bar').style.width = lv + '%';
+    $('tk-lv').textContent = lv;
+    setTag('tk-tag', on ? '对讲中' : '未开启', on ? 'on' : '');
+    $('tk-st').textContent = on ? '已开启' : '未开启';
+    var b = $('btn-talk');
+    if(on) b.classList.add('on'); else b.classList.remove('on');
+    b.textContent = on ? '关闭对讲' : '开启对讲';
+  }
+
+  /* 浏览器采样率通常是 44.1k/48k，板端只认 16k。
+     线性插值够用：语音频带 4kHz 以下，16k 采样已经过采样了一倍。 */
+  function resample16k(inp, inRate){
+    if(inRate === 16000) return inp;
+    var ratio = inRate / 16000;
+    var n = Math.floor(inp.length / ratio);
+    var out = new Float32Array(n);
+    for(var i = 0; i < n; i++){
+      var pos = i * ratio;
+      var i0 = Math.floor(pos);
+      var frac = pos - i0;
+      var a = inp[i0] === undefined ? 0 : inp[i0];
+      var b = inp[i0 + 1];
+      out[i] = (b === undefined) ? a : (a + (b - a) * frac);
+    }
+    return out;
+  }
+
+  function ensureMic(){
+    if(tkStream) return Promise.resolve(true);
+
+    /* ★ 浏览器只在"安全上下文"里给麦克风：
+     *     https://...  或者  http://localhost / 127.0.0.1
+     *   而本页是 http://192.168.137.100:8080 —— 明文 HTTP + IP，
+     *   Chrome/Edge 直接把 navigator.mediaDevices 置为 undefined，
+     *   连授权弹窗都不会出现。这是"网页麦克风点了没反应"的第一原因，
+     *   跟板子一点关系都没有。 */
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      var hint = location.protocol === 'https:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+        ? '此浏览器不支持麦克风采集'
+        : '浏览器禁止了明文 HTTP 页面的麦克风：请用 Chrome 加启动参数 --unsafely-treat-insecure-origin-as-secure='
+          + location.origin + ' 启动，或改用 https 访问';
+      log(hint, 'er');
+      return Promise.resolve(false);
+    }
+
+    return navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true}}).then(function(st){
+      tkStream = st;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      tkCtx = new AC();
+      if(tkCtx.state === 'suspended') tkCtx.resume();
+      tkSrc = tkCtx.createMediaStreamSource(st);
+      tkSp = tkCtx.createScriptProcessor(4096, 1, 1);
+
+      /* ★ 不能直接连 destination（扬声器）。
+       *   ScriptProcessor 必须接到一个输出节点才会被驱动，但接到扬声器
+       *   就是"自己说、自己听"—— 开外放会立刻啸叫，而且对方听到的是回声。
+       *   这里串一个增益 0 的 GainNode 当哑负载。 */
+      tkMute = tkCtx.createGain();
+      tkMute.gain.value = 0;
+
+      tkSp.onaudioprocess = function(e){
+        if(!tkRec) return;
+        var d = e.inputBuffer.getChannelData(0);
+        var r = resample16k(d, tkCtx.sampleRate);
+        var i16 = new Int16Array(r.length);
+        for(var i = 0; i < r.length; i++){
+          var v = r[i];
+          if(v > 1) v = 1; else if(v < -1) v = -1;
+          i16[i] = (v < 0) ? Math.round(v * 32768) : Math.round(v * 32767);
+        }
+        tkChunks.push(new Uint8Array(i16.buffer));
+
+        /* ★ 边录边发，不要等松手。
+         *   板端一次最多收 24KB（0.75 秒），攒到 12000 字节（约 0.37 秒）
+         *   就推一块：延迟小，松手时也不会突然堆出好几秒的积压。 */
+        tkBytes += i16.length * 2;
+        if(tkBytes >= 12000) flushTalk();
+      };
+      tkSrc.connect(tkSp);
+      tkSp.connect(tkMute);
+      tkMute.connect(tkCtx.destination);
+
+      log('网页麦克风已就绪', 'ok');
+      return true;
+    }).catch(function(e){
+      var m = e && e.message ? e.message : e;
+      if(e && e.name === 'NotAllowedError')      m = '被浏览器拒绝（地址栏左边点麦克风图标改成允许）';
+      else if(e && e.name === 'NotFoundError')   m = '没有找到麦克风设备';
+      log('麦克风打开失败：' + m, 'er');
+      return false;
+    });
+  }
+
+  /* 板端一次最多收 24KB（0.75 秒），所以按 20000 字节切块、串行发送。
+     串行是必须的：webd 是单线程，并发推流只会互相排队和丢块。 */
+  function flushTalk(){
+    tkBytes = 0;
+    if(!tkChunks.length) return;
+    var total = 0, i;
+    for(i = 0; i < tkChunks.length; i++) total += tkChunks[i].length;
+    var all = new Uint8Array(total);
+    var off = 0;
+    for(i = 0; i < tkChunks.length; i++){
+      all.set(tkChunks[i], off);
+      off += tkChunks[i].length;
+    }
+    tkChunks = [];
+
+    for(var p = 0; p < all.length; p += 20000){
+      tkQueue.push(all.slice(p, Math.min(p + 20000, all.length)));
+    }
+    pumpTalk();
+  }
+
+  function pumpTalk(){
+    if(tkSending || !tkQueue.length) return;
+    var chunk = tkQueue.shift();
+    tkSending = true;
+    fetch('/api/talkdown', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/octet-stream'},
+      body: chunk
+    }).then(function(r){
+      return r.text();
+    }).then(function(t){
+      if(t.indexOf('OK') !== 0) log('对讲上行 → ' + t, 'er');
+    }).catch(function(e){
+      log('对讲上行失败：' + e.message, 'er');
+    }).then(function(){
+      tkSending = false;
+      pumpTalk();
+    });
+  }
+
+  $('btn-talk').addEventListener('click', function(){
+    var on = this.classList.contains('on');
+
+    if(DEMO){
+      renderTalk({talk: on ? 0 : 1, t_lv: 0});
+      return;
+    }
+
+    fetchText('/api/talk?op=' + (on ? 'stop' : 'start')).then(function(r){
+      if(r.indexOf('OK') === 0){
+        log('对讲 ' + (on ? '已关闭' : '已开启'), 'ok');
+        if(!on) ensureMic();
+        fastPoll();
+      }else if(r === 'ERR:asr-busy'){
+        log('语音识别正在跑，等它结束再开对讲', 'er');
+      }else{
+        log('对讲 → ' + r, 'er');
+      }
+    }).catch(function(e){ log('对讲开启失败：' + e.message, 'er'); });
+  });
+
+  $('btn-listen').addEventListener('click', function(){
+    if(DEMO){ log('预览模式没有真实音频', 'er'); return; }
+    if(!$('btn-talk').classList.contains('on')){
+      log('先点「开启对讲」—— 板端音频通道没开时取不到声音', 'er');
+      return;
+    }
+    var a = new Audio('/api/mic?sec=3&t=' + Date.now());
+    a.play().then(function(){
+      log('播放板端最近 3 秒');
+    }).catch(function(e){
+      log('播放失败：' + e.message + '（刚开启要等 5 秒直流收敛）', 'er');
+    });
+  });
+
+  (function bindMic(){
+    var b = $('btn-mic');
+    if(!b) return;
+
+    b.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      if(DEMO){ log('预览模式没有真实音频', 'er'); return; }
+      if(!$('btn-talk').classList.contains('on')){
+        log('先点上面的「开启对讲」—— 板端要先把音频通道打开', 'er');
+        return;
+      }
+      ensureMic().then(function(ok){
+        if(!ok) return;
+        tkChunks = [];
+        tkQueue = [];
+        tkBytes = 0;
+        tkRec = true;
+        b.classList.add('on');
+        b.textContent = '正在说… 松开结束';
+      });
+    });
+
+    var stop = function(){
+      if(!tkRec) return;
+      tkRec = false;
+      b.classList.remove('on');
+      b.textContent = '按住说话（送到板端）';
+      flushTalk();
+    };
+
+    b.addEventListener('pointerup', stop);
+    b.addEventListener('pointercancel', stop);
+    b.addEventListener('pointerleave', stop);
+  })();
+
+  /* ---------- 轮询 ---------- */
+  var polling = false;
+  var fastTimer = null;
+  var galVer = -1, evtVer = -1;   /* 板端给的版本号，见 poll() 里的说明 */
+
+  function fastPoll(){
+    if(fastTimer) clearInterval(fastTimer);
+    var n = 0;
+    fastTimer = setInterval(function(){
+      poll();
+      if(++n >= 5){ clearInterval(fastTimer); fastTimer = null; }
+    }, 700);
+  }
+
+  function refreshSoon(){ setTimeout(poll, 400); fastPoll(); }
+
+  function applyState(s){
+    renderSys(s);
+    renderMem(s);
+    renderCpu(s);
+    renderUp(s);
+    renderImg(s);
+    renderFace(s);
+    renderAsr(s);
+    renderTalk(s);
+  }
+
+  function poll(){
+    if(DEMO) return;
+    if(polling) return;         /* 上一轮没回来就别再发，板子是单线程 */
+    polling = true;
+    fetch('/api/state', {cache:'no-store'}).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(s){
+      $('dot').classList.add('on');
+      $('conn').textContent = '已连接';
+      applyState(s);
+
+      /*
+        相册和事件都只在"版本号变了"时才去拉。
+
+        原来这里是固定再发两个请求（state → gallery → evt 串行），
+        而大部分时候相册和事件一个字都没变。webd 是单线程，
+        每个请求都要排队，页面上一按按钮就感觉"要等一下"。
+        现在稳态下每轮只有 1 个请求，按钮和轮询互不挤占。
+        版本号由板端给：gal_t = 最新一张图的 id（删/拍都会变），
+        evt_t = 最新一条事件的开机秒（只增不减）。
+      */
+      var jobs = [];
+
+      if(s.gal_t !== galVer){
+        galVer = s.gal_t;
+        /* 用 refreshGal 而不是裸 fetch：相册是分页的，
+           这里必须带上当前页的 off，否则一旦有新图就跳回第 1 页 */
+        jobs.push(refreshGal());
+      }
+      if(s.evt_t !== evtVer){
+        evtVer = s.evt_t;
+        jobs.push(fetchText('/api/evt').then(function(t){
+          try{ renderEvt(JSON.parse(t)); }catch(e){}
+        }).catch(function(){}));
+      }
+
+      return Promise.all(jobs);
+    }).catch(function(e){
+      $('dot').classList.remove('on');
+      $('conn').textContent = '断开';
+      log('状态请求失败：' + e.message, 'er');
+    }).then(function(){
+      polling = false;
+    });
+  }
+
+  poll();
+  setInterval(poll, 2000);
+
+  /* ---------- 演示模式：不接板子也能看版式 ---------- */
+  if(DEMO){
+    applyState({
+      uptime:'0:47:12', ip:'192.168.137.100', s_ver:'RT-Thread 3.1.3',
+      fw_ver:'SENTINEL 1.0 (Oct 28 2026)',
+      cpu:25, mem_tot:21004, mem_use:4268, mem_pk:5120, evi:3, evi_cap:50,
+      i_ok:1, i_brt:0, i_crt:64, i_sat:32, i_mir:0, i_flp:0, i_mode:0, i_wb:0,
+      i_dev:-1, i_rgn:0, i_ggn:0, i_bgn:0, i_mwb:0, talk:1, t_lv:37,
+      gal_t:3, evt_t:2820, evt_n:3,
+      ivs_n:1, ivs_det:1, ivs_cx:412, ivs_ln:266,
+      f_mode:'pc', f_src:'GP1CH1', f_ref:3, f_ok:1, f_mt:1, f_nm:'张三',
+      f_sc:872, f_ms:96, f_age:2200, f_busy:0, f_msg:'ok',
+      asr:'打开摄像头', asr_err:'', asr_ph:0, asr_tot:6000, asr_el:0, last_cmd:'vlcview -p 1246'
+    });
+    renderGal({n:3, cap:50, items:[
+      {id:3, ty:2, sz:41200, w:800, h:480, up:2820},
+      {id:2, ty:0, sz:38600, w:800, h:480, up:2650},
+      {id:1, ty:3, sz:44100, w:800, h:480, up:2310}
+    ]});
+    renderEvt({n:3, items:[
+      {up:2820, k:'face', t:'hit zhang'},
+      {up:2650, k:'snap', t:'evidence captured'},
+      {up:2310, k:'boot', t:'webd start'}
+    ]});
+  }
+})();
+</script>
+</body>
+</html>

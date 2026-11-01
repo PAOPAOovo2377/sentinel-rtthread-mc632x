@@ -1,0 +1,17 @@
+# 统一换行符：源码一律 LF，避免在 Linux 上构建时 Makefile 出错
+* text=auto eol=lf
+
+*.c      text eol=lf
+*.h      text eol=lf
+*.mk     text eol=lf
+*.config text eol=lf
+.config  text eol=lf
+*.py     text eol=lf
+*.md     text eol=lf
+*.html   text eol=lf
+*.srt    text eol=lf
+*.bat    text eol=crlf
+
+*.png    binary
+*.jpg    binary
+*.pdf    binary
