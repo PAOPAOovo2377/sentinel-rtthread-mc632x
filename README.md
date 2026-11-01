@@ -13,15 +13,9 @@
 
 ## 简介
 
-**SENTINEL 是一台脱离 PC 独立运行的双目 AI 视觉安防终端。** 它只用一根电源线和一根网线，上电后自动完成网络配置、媒体管线启动、Web 服务启动与对时；现场只需打开浏览器访问 `http://<板端IP>:8080`，全部交互都收敛在板端下发的单个网页里，无需安装任何客户端。
+**SENTINEL 是一台脱离 PC 独立运行的双目 AI 视觉安防终端。** 只用一根电源线和一根网线，上电后自动完成网络配置、媒体管线启动、Web 服务启动与对时；现场打开浏览器访问 `http://<板端IP>:8080` 即可使用，全部交互都收敛在板端下发的单个网页里，无需安装客户端。
 
-作品要解决的不是"把功能堆在一起"，而是资源受限嵌入式平台上的三个真实矛盾：
-
-| 矛盾 | 常规做法 | 本作品的做法 |
-| --- | --- | --- |
-| 单摄难以兼顾画质与算法 | 降分辨率喂算法，人眼看不清 | **双摄分路**：G0 1080P 供人看，G1 800×480 专喂神经网络 |
-| AI 推理与视频编码抢资源 | 全塞 CPU，开 AI 就卡 | 推理、编码、缩放全走 **VPU / VENC / NN 硬件单元**，CPU 只做调度 |
-| 报警只有框没有证据 | 框消失什么都不留 | **越界即落盘**：判定命中立刻抓帧进证据相册，可回溯、可举证 |
+在单块 MC632X 上实现了双路摄像头同时出图、板端人形检测、绊线越界判定与自动抓帧存证、云端人脸识别、图像参数在线整定，以及语音指令和双向对讲。
 
 ---
 
@@ -133,11 +127,7 @@ SENTINEL/
 │   ├── script/rtt/               # 构建脚本（模块挂载）
 │   ├── .config / config.h        # 构建配置（两处必须同步修改）
 │   └── ...
-├── docs/
-│   ├── 作品说明书.md              # 完整技术文档（约 1.9 万字）
-│   ├── 演示视频脚本.md            # 分镜脚本
-│   ├── SENTINEL_网页演示_字幕.srt
-│   └── images/                   # 架构图
+├── docs/images/                  # 架构图
 ├── LICENSE
 └── README.md
 ```
@@ -169,7 +159,7 @@ git clone https://github.com/PAOPAOovo2377/sentinel-rtthread-mc632x.git SENTINEL
 cp -r SENTINEL/app/. rt-thread/app/media_demo/
 ```
 
-覆盖后至少确认这几个文件是**本仓库版本**（而不是原厂示例）：
+覆盖后确认这几个文件是**本仓库版本**（而不是原厂示例）：
 
 ```bash
 ls app/media_demo/web/src/          # 应有 webd.c / img_tune.c / gallery.c / talk.c / sysmon.c / dog.c
@@ -177,29 +167,9 @@ ls app/media_demo/cloud_face/src/   # 应有 cloud_face.c / cf_http.c
 ls app/media_demo/startup/          # 应有 boot_auto.c
 ```
 
-### 3. 配置与编译
+之后按原厂流程 `make clean && make`，固件在 `out/bin/`。
 
-进入 `app/media_demo` 目录：
-
-```bash
-cd app/media_demo
-make clean
-make
-```
-
-固件生成在 `out/bin/`。
-
-> ⚠️ **不要执行 `make mc632x_defconfig`**。它会把这些自定义开关全部重置掉（TFTP / VBUS / VIDEO / MBEDTLS / LIBCURL / `FH_APP_OPEN_IVS` 等）。本项目所有开关**直接改 `.config` 与 `config.h`**，二者必须同步——`.config` 是构建系统的变量来源，`config.h` 是编译期宏定义。
->
-> 另外 SDK 全局开启 `-Werror`，任何未使用函数、隐式声明都会中断编译。改动 `.h` 后记得同步到编译副本。
-
-### 4. 烧录
-
-板端走 TFTP：先 `tftp` 拉取 `out/bin/` 下的固件，再用 `${filesize}` 擦除写入。串口默认 115200。
-
-### 5. 上电自启
-
-烧录后复位，串口会打印 7 步启动日志。浏览器访问 `http://192.168.137.100:8080`（IP 按现场网段调整）。
+> ⚠️ **不要执行 `make mc632x_defconfig`**，它会重置掉自定义开关（TFTP / VBUS / VIDEO / MBEDTLS / LIBCURL / `FH_APP_OPEN_IVS` 等）。本项目所有开关都改在 `.config` 与 `config.h`，二者需同步。
 
 ---
 
@@ -281,14 +251,6 @@ make
 
 **Q：改了网页没变化？**
 网页资源是编译期打成 C 数组的，改完 `webui/index.html` 必须重跑 `web/tools/pack_web.py` 生成 `web_index_gz.c`，再重新编译烧录。
-
----
-
-## 文档与演示
-
-- 完整技术文档：[docs/作品说明书.md](docs/作品说明书.md)（约 1.9 万字，含设计取舍、线程规划、内存布局、测试记录）
-- 演示分镜脚本：[docs/演示视频脚本.md](docs/演示视频脚本.md)
-- 网页演示字幕：[docs/SENTINEL_网页演示_字幕.srt](docs/SENTINEL_网页演示_字幕.srt)
 
 ---
 
